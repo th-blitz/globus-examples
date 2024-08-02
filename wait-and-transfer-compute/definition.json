@@ -1,0 +1,207 @@
+{
+  "Comment": "A Flow for performing a Copy operation by first checking for inactivity at source for a user specified period of time before initiating a one time transfer",
+  "StartAt": "CheckInitialState",
+  "States": {
+    "CheckInitialState": {
+      "Type": "Action",
+      "Comment": "Check the initial state of the source path to determine its type and modification time",
+      "ActionUrl": "https://transfer.actions.globus.org/stat",
+      "Parameters": {
+        "path.$": "$.source.path",
+        "endpoint_id.$": "$.source.id"
+      },
+      "ResultPath": "$.InitialSourceStat",
+      "Next": "WaitForInactivity"
+    },
+    "WaitForInactivity": {
+      "Type": "Wait",
+      "Comment": "Wait for the specified inactivity period",
+      "SecondsPath": "$.inactivity_period_seconds",
+      "Next": "CheckForUpdates"
+    },
+    "CheckForUpdates": {
+      "Type": "Action",
+      "Comment": "Check the source path for any updates after the inactivity period",
+      "ActionUrl": "https://transfer.actions.globus.org/stat",
+      "Parameters": {
+        "path.$": "$.source.path",
+        "endpoint_id.$": "$.source.id"
+      },
+      "ResultPath": "$.UpdatedSourceStat",
+      "Next": "CompareModificationTimesExpression"
+    },
+    "CompareModificationTimesExpression" : {
+      "Type": "ExpressionEval",
+      "Parameters": {
+        "value.=" : "UpdatedSourceStat.details.last_modified == InitialSourceStat.details.last_modified"
+      },
+      "ResultPath": "$.equalTimestamps",
+      "Next": "CompareModificationTimes"
+    },
+    "CompareModificationTimes": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.equalTimestamps.value",
+          "BooleanEquals": true,
+          "Next": "LogNoModification"
+        },
+        {
+          "Variable": "$.equalTimestamps.value",
+          "BooleanEquals": false,
+          "Next": "CheckInitialState"
+        }
+      ],
+      "Default": "FailInactivityCheck"
+    },
+    "LogNoModification": {
+      "Type": "Pass",
+      "Comment": "Log that no modification was detected",
+      "Parameters": {
+        "message": "No modification detected, proceeding with transfer"
+      },
+      "ResultPath": "$.LogNoModification",
+      "Next": "GetSourcePathInfo"
+    },
+    "GetSourcePathInfo": {
+      "Type": "Action",
+      "Comment": "Lookup the source path to determine its type (file/dir) to decide if transfer should be recursive",
+      "ActionUrl": "https://transfer.actions.globus.org/stat",
+      "Parameters": {
+        "path.$": "$.source.path",
+        "endpoint_id.$": "$.source.id"
+      },
+      "ResultPath": "$.SourceStat",
+      "Next": "GetDestinationPathInfo"
+    },
+    "GetDestinationPathInfo": {
+      "Type": "Action",
+      "Comment": "Lookup the destination path to determine its type (file/dir)",
+      "ActionUrl": "https://transfer.actions.globus.org/stat",
+      "Parameters": {
+        "path.$": "$.destination.path",
+        "endpoint_id.$": "$.destination.id"
+      },
+      "ResultPath": "$.DestinationStat",
+      "Next": "IdentifyPathTypes"
+    },
+    "IdentifyPathTypes": {
+      "Comment": "Check the paths to see if they are directories or files",
+      "Type": "ExpressionEval",
+      "Parameters": {
+        "source_is_dir.=": "SourceStat.details.type == 'dir'",
+        "dest_is_dir.=": "'type' in DestinationStat.details and DestinationStat.details.type == 'dir'",
+        "dest_exists.=": "'code' not in DestinationStat.details or DestinationStat.details.code != 'NotFound'"
+      },
+      "ResultPath": "$.PathTypes",
+      "Next": "TestPathConstraints"
+    },
+    "TestPathConstraints": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.PathTypes.dest_exists",
+          "BooleanEquals": false,
+          "Next": "ComputeDestPathNoOp"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.PathTypes.source_is_dir",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.PathTypes.dest_is_dir",
+              "BooleanEquals": false
+            }
+          ],
+          "Next": "FailDirOntoFile"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.PathTypes.source_is_dir",
+              "BooleanEquals": false
+            },
+            {
+              "Variable": "$.PathTypes.dest_is_dir",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "ComputeDestPathFileUnderDir"
+        }
+      ],
+      "Default": "ComputeDestPathNoOp"
+    },
+    "ComputeDestPathFileUnderDir": {
+      "Comment": "Compute the destination path for file-to-dir transfers.",
+      "Type": "ExpressionEval",
+      "Parameters": {
+        "path.=": "destination.path + source.path.rpartition('/')[2]"
+      },
+      "ResultPath": "$.ComputedDest",
+      "Next": "Transfer"
+    },
+    "ComputeDestPathNoOp": {
+      "Comment": "\"Compute\" the destination path for file-to-file and dir-to-dir transfers. This is a no-op used to match the output format of ComputeDestPathFileUnderDir.",
+      "Type": "ExpressionEval",
+      "Parameters": {
+        "path.$": "$.destination.path"
+      },
+      "ResultPath": "$.ComputedDest",
+      "Next": "Transfer"
+    },
+    "Transfer": {
+      "Type": "Action",
+      "Comment": "Run the initial transfer operation from the source to the destination",
+      "ActionUrl": "https://transfer.actions.globus.org/transfer",
+      "Parameters": {
+        "DATA": [
+          {
+            "source_path.$": "$.source.path",
+            "destination_path.$": "$.ComputedDest.path"
+          }
+        ],
+        "source_endpoint.$": "$.source.id",
+        "destination_endpoint.$": "$.destination.id"
+      },
+      "ResultPath": "$.TransferResult",
+      "Next": "InvokeComputeEndpoint"
+    },
+    "FailInactivityCheck": {
+      "Comment": "Report failure due to inactivity check",
+      "Type": "Fail",
+      "Cause": "InactivityCheckFailed",
+      "Error": "The source directory was modified during the inactivity period."
+    },
+    "FailDirOntoFile": {
+      "Comment": "Report failure due to a transfer of a directory to a file",
+      "Type": "Fail",
+      "Cause": "DirectoryOntoFile",
+      "Error": "If the source path is a directory, the destination path must also be a directory. Moving a directory to a file is not possible."
+    },
+    "InvokeComputeEndpoint": {
+        "Comment": "Invoke a Globus Compute endpoint",
+        "Type": "Action",
+        "ActionUrl": "https://compute.actions.globus.org",
+        "Parameters": {
+            "endpoint.$": "$.compute_endpoint",
+            "function.$": "$.compute_function",
+            "kwargs.$": "$.function_args"
+        },
+        "ResultPath": "$.ComputeResult",
+        "WaitTime": 180,
+        "Next": "Success"
+    },
+    "Success": {
+      "Comment": "Normal completion, so report success and exit",
+      "Type": "Pass",
+      "Parameters": {
+        "message": "Move operation complete"
+      },
+      "ResultPath": "$.FlowResult",
+      "End": true
+    }
+  }
+}
+

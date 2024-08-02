@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "required": [
+    "source",
+    "destination",
+    "inactivity_period_seconds",
+    "compute_endpoint",
+    "compute_function",
+    "function_args"
+  ],
+  "properties": {
+    "source": {
+      "type": "object",
+      "title": "Source",
+      "format": "globus-collection",
+      "required": [
+        "id",
+        "path"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Source Collection ID",
+          "format": "uuid",
+          "description": "The UUID for the collection which serves as the source of the Move"
+        },
+        "path": {
+          "type": "string",
+          "title": "Source Collection Path",
+          "description": "The path on the source collection for the data"
+        }
+      },
+      "description": "The data's origin.",
+      "additionalProperties": false
+    },
+    "destination": {
+      "type": "object",
+      "title": "Destination",
+      "format": "globus-collection",
+      "required": [
+        "id",
+        "path"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Destination Collection ID",
+          "format": "uuid",
+          "description": "The UUID for the collection which serves as the destination for the Move"
+        },
+        "path": {
+          "type": "string",
+          "title": "Destination Collection Path",
+          "description": "The path on the destination collection where the data will be stored"
+        }
+      },
+      "description": "The destination for the data.",
+      "additionalProperties": false
+    },
+    "inactivity_period_seconds": {
+      "type": "integer",
+      "title": "Inactivity Period (seconds)",
+      "description": "The period of inactivity required before initiating the transfer"
+    },
+    "compute_endpoint": {
+        "type": "string",
+        "format": "uuid",
+        "title": "Globus Compute Endpoint ID",
+        "description": "The UUID of the Globus Compute endpoint where the function will run"
+    },
+    "compute_function": {
+        "type": "string",
+        "format": "uuid",
+        "title": "Globus Compute Function ID",
+        "description": "The UUID of the function to invoke; must be registered with the Globus Compute service"
+    },
+    "function_args": {
+        "type": "object",
+        "title": "Function Inputs",
+        "description": "Inputs to pass to the function",
+        "properties": {},
+        "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
+
