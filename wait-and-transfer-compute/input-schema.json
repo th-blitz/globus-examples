@@ -75,11 +75,11 @@
         "description": "The UUID of the function to invoke; must be registered with the Globus Compute service"
     },
     "function_args": {
-        "type": "object",
-        "title": "Function Inputs",
-        "description": "Inputs to pass to the function",
-        "properties": {},
-        "additionalProperties": true
+        "type": "string",
+        "title": "Function Input",
+        "description": "Command input to pass to the function",
+        "minLength": 1,
+        "maxLength": 100
     }
   },
   "additionalProperties": false

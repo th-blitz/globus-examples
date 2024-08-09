@@ -187,7 +187,9 @@
         "Parameters": {
             "endpoint.$": "$.compute_endpoint",
             "function.$": "$.compute_function",
-            "kwargs.$": "$.function_args"
+            "kwargs": {
+                "command.$" : "$.function_args"
+            }
         },
         "ResultPath": "$.ComputeResult",
         "WaitTime": 180,
